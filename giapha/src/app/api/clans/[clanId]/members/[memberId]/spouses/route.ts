@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { marriages, members } from "@/lib/db/schema";
+import { marriages } from "@/lib/db/schema";
+import { addSpouseSchema } from "@/lib/validations/member";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -11,14 +12,16 @@ export async function POST(
   try {
     const { clanId, memberId } = await params;
     const body = await req.json();
-    const { spouseId, marriageDate } = body;
+    const parsed = addSpouseSchema.safeParse(body);
 
-    if (!spouseId) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { message: "Thiếu spouseId" },
+        { message: "Dữ liệu không hợp lệ", errors: parsed.error.flatten() },
         { status: 400 }
       );
     }
+
+    const { spouseId, marriageDate } = parsed.data;
 
     const now = new Date().toISOString();
 

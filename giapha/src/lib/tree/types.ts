@@ -4,6 +4,7 @@ export type {
   ParentChildEdgeData,
   SpouseEdgeData,
   TreeDirection,
+  TreeMode,
   EdgeStyle,
   TreeQueryParams,
   TreeData,

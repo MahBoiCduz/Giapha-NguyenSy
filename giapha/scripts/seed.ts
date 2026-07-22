@@ -1,11 +1,9 @@
 /**
- * Seed script — creates local SQLite DB, pushes schema, and creates a test user.
+ * Seed script — creates local SQLite DB and pushes schema.
  * Usage: npx tsx scripts/seed.ts
  */
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
 import * as schema from "../src/lib/db/schema";
 
 async function seed() {
@@ -18,44 +16,7 @@ async function seed() {
   // Create tables (push schema)
   console.log("Creating tables...");
 
-  // Create all tables by running raw SQL
   const sql = `
-    CREATE TABLE IF NOT EXISTS "user" (
-      "id" text PRIMARY KEY,
-      "name" text,
-      "email" text NOT NULL UNIQUE,
-      "emailVerified" integer,
-      "image" text
-    );
-
-    CREATE TABLE IF NOT EXISTS "account" (
-      "userId" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-      "type" text NOT NULL,
-      "provider" text NOT NULL,
-      "providerAccountId" text NOT NULL,
-      "refresh_token" text,
-      "access_token" text,
-      "expires_at" integer,
-      "token_type" text,
-      "scope" text,
-      "id_token" text,
-      "session_state" text,
-      PRIMARY KEY ("provider", "providerAccountId")
-    );
-
-    CREATE TABLE IF NOT EXISTS "session" (
-      "sessionToken" text PRIMARY KEY,
-      "userId" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-      "expires" integer NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS "verificationToken" (
-      "identifier" text NOT NULL,
-      "token" text NOT NULL,
-      "expires" integer NOT NULL,
-      PRIMARY KEY ("identifier", "token")
-    );
-
     CREATE TABLE IF NOT EXISTS "clans" (
       "id" text PRIMARY KEY,
       "name" text NOT NULL,
@@ -133,14 +94,6 @@ async function seed() {
       "sort_order" integer DEFAULT 0,
       "created_at" text DEFAULT (datetime('now'))
     );
-
-    CREATE TABLE IF NOT EXISTS "clan_editors" (
-      "id" text PRIMARY KEY,
-      "clan_id" text NOT NULL REFERENCES "clans"("id") ON DELETE CASCADE,
-      "user_id" text NOT NULL,
-      "role" text DEFAULT 'editor',
-      "joined_at" text DEFAULT (datetime('now'))
-    );
   `;
 
   const statements = sql.split(";").filter((s) => s.trim());
@@ -148,58 +101,8 @@ async function seed() {
     await client.execute(stmt.trim() + ";");
   }
 
-  console.log("Tables created successfully.");
-
-  // Check if test user already exists
-  const existing = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (schema.users as any).email
-        ? undefined
-        : undefined
-    )
-    .all();
-
-  // Create test user
-  const testEmail = "admin@example.com";
-  const testPassword = "123456";
-
-  const alreadyExists = await db
-    .select()
-    .from(schema.users)
-    .all();
-
-  const userExists = alreadyExists.find((u) => u.email === testEmail);
-  if (userExists) {
-    console.log(`Test user already exists: ${testEmail}`);
-    console.log("Done!");
-    return;
-  }
-
-  const userId = uuidv4();
-  const hashedPassword = await bcrypt.hash(testPassword, 10);
-
-  await db.insert(schema.users).values({
-    id: userId,
-    name: "Admin",
-    email: testEmail,
-  });
-
-  await db.insert(schema.accounts).values({
-    userId,
-    type: "credentials",
-    provider: "credentials",
-    providerAccountId: userId,
-    refresh_token: hashedPassword,
-  });
-
   console.log("========================================");
-  console.log("  Seed data created successfully!");
-  console.log("========================================");
-  console.log(`  Email:    ${testEmail}`);
-  console.log(`  Password: ${testPassword}`);
+  console.log("  DB Schema created successfully!");
   console.log("========================================");
 }
 

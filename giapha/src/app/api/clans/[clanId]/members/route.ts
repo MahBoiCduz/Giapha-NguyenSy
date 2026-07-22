@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { members, parentChildRelationships, marriages } from "@/lib/db/schema";
 import { createMemberSchema, memberSearchSchema } from "@/lib/validations/member";
-import { eq, like, and } from "drizzle-orm";
+import { eq, like, and, or } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 export async function GET(
@@ -110,27 +110,48 @@ export async function POST(
       updatedAt: now,
     });
 
-    // If parent specified, create relationship
-    if (parsed.data.parentId) {
-      await db.insert(parentChildRelationships).values({
-        id: uuidv4(),
-        clanId,
-        parentId: parsed.data.parentId,
-        childId: id,
-        relationshipType: "biological",
-        birthOrder: parsed.data.birthOrder || null,
-      });
-    }
+    // Track marriageId for parent-child relationship
+    let parentMarriageId: string | null = null;
 
     // If spouse specified, create marriage
     if (parsed.data.spouseId) {
+      const marriageId = uuidv4();
       await db.insert(marriages).values({
-        id: uuidv4(),
+        id: marriageId,
         clanId,
         partner1Id: parsed.data.spouseId,
         partner2Id: id,
         isActive: 1,
         createdAt: now,
+      });
+      parentMarriageId = marriageId;
+    }
+
+    // If parent specified, create relationship
+    if (parsed.data.parentId) {
+      // If no marriage was just created, try to find an existing marriage involving the parent
+      if (!parentMarriageId) {
+        const existingMarriage = await db
+          .select()
+          .from(marriages)
+          .where(
+            or(
+              eq(marriages.partner1Id, parsed.data.parentId),
+              eq(marriages.partner2Id, parsed.data.parentId)
+            )
+          )
+          .get();
+        parentMarriageId = existingMarriage?.id ?? null;
+      }
+
+      await db.insert(parentChildRelationships).values({
+        id: uuidv4(),
+        clanId,
+        parentId: parsed.data.parentId,
+        childId: id,
+        marriageId: parentMarriageId,
+        relationshipType: "biological",
+        birthOrder: parsed.data.birthOrder || null,
       });
     }
 

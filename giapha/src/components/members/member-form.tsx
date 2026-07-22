@@ -14,9 +14,11 @@ interface MemberFormProps {
   clanId: string;
   member?: Member; // undefined = create mode
   onSuccess?: () => void;
+  spouseId?: string; // pre-fill spouse relationship (create mode only)
+  parentId?: string; // pre-fill parent relationship (create mode only)
 }
 
-export function MemberForm({ clanId, member, onSuccess }: MemberFormProps) {
+export function MemberForm({ clanId, member, onSuccess, spouseId, parentId }: MemberFormProps) {
   const router = useRouter();
   const isEditing = !!member;
 
@@ -73,6 +75,7 @@ export function MemberForm({ clanId, member, onSuccess }: MemberFormProps) {
       phone: phone || undefined,
       email: email || undefined,
       notes: notes || undefined,
+      ...(isEditing ? {} : { spouseId: spouseId || undefined, parentId: parentId || undefined }),
     };
 
     try {

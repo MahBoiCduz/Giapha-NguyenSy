@@ -18,11 +18,12 @@ import { SpouseConnector } from "./nodes/spouse-connector";
 import { ParentChildEdge } from "./edges/parent-child-edge";
 import { SpouseEdge } from "./edges/spouse-edge";
 import { FamilyTreeToolbar } from "./family-tree-toolbar";
+import { TreeModeSelector } from "./tree-mode-selector";
 import { AddMemberDialog } from "./dialogs/add-member-dialog";
 import { useTreeLayout } from "./hooks/use-tree-layout";
 import { useTreeExport } from "./hooks/use-tree-export";
 import { transformTreeData } from "@/lib/tree/transform";
-import type { PersonNodeData, EdgeStyle, TreeDirection, TreeData } from "@/types/tree";
+import type { PersonNodeData, EdgeStyle, TreeDirection, TreeMode, TreeData } from "@/types/tree";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: any = {
@@ -49,6 +50,7 @@ export function FamilyTree({ treeData, clanId }: FamilyTreeProps) {
 
   const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("step");
   const [direction, setDirection] = useState<TreeDirection>("down");
+  const [treeMode, setTreeMode] = useState<TreeMode>("expand");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"add-child" | "add-spouse">("add-child");
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export function FamilyTree({ treeData, clanId }: FamilyTreeProps) {
     rootId,
     direction,
     maxGenerations: 5,
+    treeMode,
   });
 
   // Handle node click → navigate to profile
@@ -188,6 +191,14 @@ export function FamilyTree({ treeData, clanId }: FamilyTreeProps) {
         onEdgeStyleChange={setEdgeStyle}
         currentEdgeStyle={edgeStyle}
       />
+
+      {/* Tree Mode Selector */}
+      <div className="absolute top-4 right-4 z-10">
+        <TreeModeSelector
+          currentMode={treeMode}
+          onModeChange={setTreeMode}
+        />
+      </div>
 
       {/* Quick Add Dialog */}
       <AddMemberDialog

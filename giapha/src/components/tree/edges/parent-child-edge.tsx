@@ -4,7 +4,6 @@ import { memo } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getSmoothStepPath,
   type EdgeProps,
 } from "@xyflow/react";
 import type { ParentChildEdgeData } from "@/types/tree";
@@ -21,17 +20,35 @@ function ParentChildEdgeComponent({
   style = {},
   markerEnd,
 }: EdgeProps & { data?: ParentChildEdgeData }) {
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 10,
-  });
-
   const isAdoptive = data?.relationshipType === "adoptive";
+
+  // Use pre-computed route from layout engine if available
+  let edgePath: string;
+  let labelX: number;
+  let labelY: number;
+
+  if (data?.route?.points && data.route.points.length >= 2) {
+    // Build SVG path from route points
+    const pts = data.route.points;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      d += ` L ${pts[i].x} ${pts[i].y}`;
+    }
+    edgePath = d;
+    // Label at the horizontal bus midpoint
+    if (pts.length >= 3) {
+      labelX = (pts[1].x + pts[2].x) / 2;
+      labelY = pts[1].y;
+    } else {
+      labelX = (pts[0].x + pts[pts.length - 1].x) / 2;
+      labelY = (pts[0].y + pts[pts.length - 1].y) / 2;
+    }
+  } else {
+    // Fallback: simple straight line
+    edgePath = `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
+    labelX = (sourceX + targetX) / 2;
+    labelY = (sourceY + targetY) / 2;
+  }
 
   return (
     <>

@@ -1,5 +1,16 @@
-import { graphlib, layout } from "@dagrejs/dagre";
-import type { TreeDirection } from "./types";
+/**
+ * Tree layout functions — GPĐV-inspired custom recursive layout.
+ * applyCustomLayout() runs exactly ONE layout pass and returns
+ * BOTH positioned nodes AND routed edges from the same layout result.
+ */
+
+import type { TreeDirection, TreeMode } from "./types";
+import type { LayoutConfig } from "./layout-types";
+import { computeExpandLayout } from "./layout-engine";
+import { computeSimpleLayout } from "./layout-simple";
+import { computeGroupLayout } from "./layout-group";
+import { buildTree, sortChildrenByMother } from "./build-tree";
+import { DEFAULT_LAYOUT_CONFIG } from "./layout-constants";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyNode = any;
@@ -7,75 +18,176 @@ type AnyNode = any;
 type AnyEdge = any;
 
 const NODE_WIDTH = 200;
-const NODE_HEIGHT = 120;
-const RANK_SEP = 150;
-const NODE_SEP = 80;
+const NODE_HEIGHT = 140;
+
+interface LayoutOutput {
+  nodes: AnyNode[];
+  edges: AnyEdge[];
+}
 
 /**
- * Apply Dagre layout to nodes and edges.
- * Returns new nodes with calculated positions.
+ * Run custom layout ONCE and return both positioned nodes and routed edges.
+ * Node positions and edge polyline routes come from the same layout result.
  */
-export function applyDagreLayout(
+export function applyCustomLayout(
   nodes: AnyNode[],
   edges: AnyEdge[],
-  direction: TreeDirection = "down"
-): AnyNode[] {
-  const g = new graphlib.Graph({ multigraph: true });
-  g.setDefaultEdgeLabel(() => ({}));
+  direction: TreeDirection = "down",
+  treeMode: TreeMode = "expand"
+): LayoutOutput {
+  if (nodes.length === 0) return { nodes: [], edges };
 
-  g.setGraph({
-    rankdir: direction === "down" ? "TB" : "BT",
-    ranksep: RANK_SEP,
-    nodesep: NODE_SEP,
-    edgesep: 40,
-    marginx: 40,
-    marginy: 40,
-  });
+  // Build adjacency maps from edges
+  const childrenMap = new Map<string, string[]>();
+  const spouseMap = new Map<string, string[]>();
+  const parentMap = new Map<string, string[]>();
+  const childMarriageMap = new Map<string, Map<string, string | null>>();
 
-  // Add nodes
-  for (const node of nodes) {
-    g.setNode(node.id, {
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-    });
-  }
-
-  // Add edges (only parent-child for layout — spouse edges are horizontal)
   for (const edge of edges) {
     if (edge.type === "parentChild") {
-      g.setEdge(
-        { v: edge.source, w: edge.target },
-        { weight: 1, minlen: 1 }
+      if (!childrenMap.has(edge.source)) {
+        childrenMap.set(edge.source, []);
+      }
+      childrenMap.get(edge.source)!.push(edge.target);
+      if (!parentMap.has(edge.target)) {
+        parentMap.set(edge.target, []);
+      }
+      parentMap.get(edge.target)!.push(edge.source);
+
+      // Track marriage for child grouping
+      if (!childMarriageMap.has(edge.source)) {
+        childMarriageMap.set(edge.source, new Map());
+      }
+      childMarriageMap.get(edge.source)!.set(
+        edge.target,
+        edge.data?.marriageId ?? null
       );
     }
     if (edge.type === "spouse") {
-      g.setEdge(
-        { v: edge.source, w: edge.target },
-        { weight: 0.1, minlen: 2 }
-      );
+      if (!spouseMap.has(edge.source)) {
+        spouseMap.set(edge.source, []);
+      }
+      spouseMap.get(edge.source)!.push(edge.target);
+      if (!spouseMap.has(edge.target)) {
+        spouseMap.set(edge.target, []);
+      }
+      spouseMap.get(edge.target)!.push(edge.source);
     }
   }
 
-  // Run the layout
-  layout(g);
+  // Build treeMap from React Flow nodes
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const treeMap = new Map<string, any>();
 
-  // Update node positions
-  return nodes.map((node: AnyNode) => {
-    const nodeWithPosition = g.node(node.id);
-    if (!nodeWithPosition) return node;
+  for (const node of nodes) {
+    const data = node.data;
+    const isRoot = data.isRoot === true;
 
-    const x = nodeWithPosition.x - NODE_WIDTH / 2;
-    const y = nodeWithPosition.y - NODE_HEIGHT / 2;
+    treeMap.set(node.id, {
+      memberId: node.id,
+      fullName: data.fullName || "",
+      gender: data.gender || "male",
+      isDeceased: !data.isLiving,
+      generation: data.generation || 1,
+      birthOrder: data.birthOrder ?? null,
+      width: isRoot ? NODE_WIDTH * DEFAULT_LAYOUT_CONFIG.rootScale : NODE_WIDTH,
+      height: isRoot ? NODE_HEIGHT * DEFAULT_LAYOUT_CONFIG.rootScale : NODE_HEIGHT,
+      x: 0,
+      y: 0,
+      spouseIds: spouseMap.get(node.id) || [],
+      childIds: childrenMap.get(node.id) || [],
+      parentIds: parentMap.get(node.id) || [],
+      subtreeLeft: 0,
+      subtreeRight: 0,
+      positioned: false,
+      childMarriageMap: childMarriageMap.get(node.id) || new Map(),
+    });
+  }
+
+  // Determine root
+  let rootId: string | null = null;
+  for (const node of nodes) {
+    if (node.data.isRoot) {
+      rootId = node.id;
+      break;
+    }
+  }
+  if (!rootId && nodes.length > 0) {
+    rootId = nodes[0].id;
+  }
+  if (!rootId) return { nodes, edges };
+
+  // Sort children by mother
+  for (const [, tnode] of treeMap) {
+    tnode.childIds = sortChildrenByMother(tnode, treeMap);
+  }
+
+  // Pick layout strategy and run ONCE
+  const config = { ...DEFAULT_LAYOUT_CONFIG, direction };
+  let layoutResult;
+
+  switch (treeMode) {
+    case "simple":
+      layoutResult = computeSimpleLayout(rootId, treeMap, config);
+      break;
+    case "group":
+      layoutResult = computeGroupLayout(rootId, treeMap, config);
+      break;
+    case "expand":
+    default:
+      layoutResult = computeExpandLayout(rootId, treeMap, config);
+      break;
+  }
+
+  // Apply positions back to nodes
+  const positionedNodes = nodes.map((node: AnyNode) => {
+    const position = layoutResult.positions.get(node.id);
+    if (!position) return node;
 
     return {
       ...node,
-      position: { x, y },
+      position: { x: position.x, y: position.y },
+      data: {
+        ...node.data,
+        cardWidth: position.width,
+        cardHeight: position.height,
+      },
     };
   });
+
+  // Apply edge routes from the layout result
+  const routedEdges = edges.map((edge: AnyEdge) => {
+    let route = null;
+
+    if (edge.type === "parentChild") {
+      const key = `${edge.source}->${edge.target}`;
+      route = layoutResult.edgeRoutes.parentChild.get(key) || null;
+    } else if (edge.type === "spouse") {
+      route =
+        layoutResult.edgeRoutes.spouse.get(
+          `${edge.source}->${edge.target}`
+        ) ||
+        layoutResult.edgeRoutes.spouse.get(
+          `${edge.target}->${edge.source}`
+        ) ||
+        null;
+    }
+
+    return {
+      ...edge,
+      data: {
+        ...edge.data,
+        route,
+      },
+    };
+  });
+
+  return { nodes: positionedNodes, edges: routedEdges };
 }
 
 /**
  * Filter nodes to only show a subset of generations from a given root.
+ * BFS from root, tracking generation distance.
  */
 export function filterByGenerations(
   nodes: AnyNode[],
@@ -83,7 +195,6 @@ export function filterByGenerations(
   rootId: string,
   maxGenerations: number
 ): { nodes: AnyNode[]; edges: AnyEdge[] } {
-  // BFS from root, tracking generation distance
   const visited = new Map<string, number>();
   const queue: string[] = [rootId];
   visited.set(rootId, 0);

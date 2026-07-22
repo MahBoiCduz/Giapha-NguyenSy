@@ -1,51 +1,4 @@
-import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlite-core";
-
-// ==================== Auth.js Tables ====================
-export const users = sqliteTable("user", {
-  id: text("id").primaryKey(),
-  name: text("name"),
-  email: text("email").notNull().unique(),
-  emailVerified: integer("emailVerified"),
-  image: text("image"),
-});
-
-export const accounts = sqliteTable(
-  "account",
-  {
-    userId: text("userId")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    type: text("type").notNull(),
-    provider: text("provider").notNull(),
-    providerAccountId: text("providerAccountId").notNull(),
-    refresh_token: text("refresh_token"),
-    access_token: text("access_token"),
-    expires_at: integer("expires_at"),
-    token_type: text("token_type"),
-    scope: text("scope"),
-    id_token: text("id_token"),
-    session_state: text("session_state"),
-  },
-  (table) => [primaryKey({ columns: [table.provider, table.providerAccountId] })]
-);
-
-export const sessions = sqliteTable("session", {
-  sessionToken: text("sessionToken").primaryKey(),
-  userId: text("userId")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  expires: integer("expires", { mode: "timestamp" }).notNull(),
-});
-
-export const verificationTokens = sqliteTable(
-  "verificationToken",
-  {
-    identifier: text("identifier").notNull(),
-    token: text("token").notNull(),
-    expires: integer("expires", { mode: "timestamp" }).notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.identifier, table.token] })]
-);
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 
 // ==================== Clans ====================
 export const clans = sqliteTable("clans", {
@@ -172,20 +125,4 @@ export const memberMedia = sqliteTable(
   (table) => [index("media_member_idx").on(table.memberId)]
 );
 
-// ==================== Clan Editors ====================
-export const clanEditors = sqliteTable(
-  "clan_editors",
-  {
-    id: text("id").primaryKey(),
-    clanId: text("clan_id")
-      .notNull()
-      .references(() => clans.id, { onDelete: "cascade" }),
-    userId: text("user_id").notNull(),
-    role: text("role", { enum: ["owner", "editor", "viewer"] }).default("editor"),
-    joinedAt: text("joined_at").default("(datetime('now'))"),
-  },
-  (table) => [
-    index("ce_clan_idx").on(table.clanId),
-    index("ce_user_idx").on(table.userId),
-  ]
-);
+

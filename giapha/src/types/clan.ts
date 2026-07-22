@@ -1,5 +1,3 @@
-import type { EditorRole } from "./member";
-
 export interface Clan {
   id: string;
   name: string;
@@ -10,14 +8,6 @@ export interface Clan {
   accessCodeHash: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface ClanEditor {
-  id: string;
-  clanId: string;
-  userId: string;
-  role: EditorRole;
-  joinedAt: string;
 }
 
 export interface ClanWithStats extends Clan {

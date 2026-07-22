@@ -18,7 +18,7 @@ export async function GET(
     });
 
     const maxGenerations = query.success ? query.data.generations : 5;
-    const rootId = query.success ? query.data.rootId : undefined;
+    let rootId = query.success ? query.data.rootId : undefined;
 
     // Fetch clan info
     const clan = await db
@@ -34,64 +34,81 @@ export async function GET(
       );
     }
 
-    // If root is specified, determine the generation range
-    // Otherwise, fetch all members
-    let allMembers;
-    if (rootId) {
-      const root = await db
-        .select({ generation: members.generation })
-        .from(members)
-        .where(eq(members.id, rootId))
-        .get();
-
-      if (!root) {
-        return NextResponse.json(
-          { message: "Không tìm thấy thành viên gốc" },
-          { status: 404 }
-        );
-      }
-
-      // Fetch members within generation range from root
-      const minGen = root.generation ?? 1;
-      const maxGen = minGen + maxGenerations - 1;
-
-      allMembers = await db
-        .select()
-        .from(members)
-        .where(
-          and(
-            eq(members.clanId, clanId),
-            sql`${members.generation} >= ${minGen}`,
-            sql`${members.generation} <= ${maxGen}`
-          )
-        )
-        .all();
-    } else {
-      allMembers = await db
-        .select()
-        .from(members)
-        .where(eq(members.clanId, clanId))
-        .all();
-    }
-
-    // Fetch all marriages for this clan
-    const allMarriages = await db
+    // Fetch all members in this clan
+    const allMembers = await db
       .select()
-      .from(marriages)
-      .where(eq(marriages.clanId, clanId))
+      .from(members)
+      .where(eq(members.clanId, clanId))
       .all();
 
-    // Fetch all parent-child relationships for this clan
+    if (allMembers.length === 0) {
+      return NextResponse.json({
+        clan,
+        members: [],
+        marriages: [],
+        relationships: [],
+      });
+    }
+
+    // Fetch all relationships to determine root
     const allRelationships = await db
       .select()
       .from(parentChildRelationships)
       .where(eq(parentChildRelationships.clanId, clanId))
       .all();
 
-    // Enrich members with counts
-    const memberIds = new Set(allMembers.map((m) => m.id));
+    // Auto-detect root if not specified: member with children but no parents, lowest generation
+    if (!rootId) {
+      const childIds = new Set(allRelationships.map((r) => r.childId));
+      const parentIds = new Set(allRelationships.map((r) => r.parentId));
 
-    // Filter marriages to only include ones where both partners are in our member set
+      // Candidates: members who are parents but not children (top of tree)
+      const rootCandidates = allMembers.filter(
+        (m) => parentIds.has(m.id) && !childIds.has(m.id)
+      );
+
+      if (rootCandidates.length > 0) {
+        // Pick the one with the lowest generation (oldest ancestor)
+        rootCandidates.sort((a, b) => (a.generation ?? 999) - (b.generation ?? 999));
+        rootId = rootCandidates[0].id;
+      } else {
+        // Fallback: member with lowest generation
+        const sorted = [...allMembers].sort(
+          (a, b) => (a.generation ?? 999) - (b.generation ?? 999)
+        );
+        rootId = sorted[0]?.id;
+      }
+    }
+
+    if (!rootId) {
+      return NextResponse.json({
+        clan,
+        members: allMembers.map((m) => ({ ...m, spouseCount: 0, childrenCount: 0 })),
+        marriages: [],
+        relationships: [],
+      });
+    }
+
+    // Determine generation range from root
+    const root = allMembers.find((m) => m.id === rootId);
+    const minGen = root?.generation ?? 1;
+    const maxGen = minGen + maxGenerations - 1;
+
+    // Filter members within generation range
+    const filteredMembers = allMembers.filter(
+      (m) => (m.generation ?? 1) >= minGen && (m.generation ?? 1) <= maxGen
+    );
+
+    const memberIds = new Set(filteredMembers.map((m) => m.id));
+
+    // Fetch marriages
+    const allMarriages = await db
+      .select()
+      .from(marriages)
+      .where(eq(marriages.clanId, clanId))
+      .all();
+
+    // Filter marriages: both partners in member set
     const filteredMarriages = allMarriages.filter(
       (m) => memberIds.has(m.partner1Id) && memberIds.has(m.partner2Id)
     );
@@ -113,7 +130,7 @@ export async function GET(
       childCounts.set(r.parentId, (childCounts.get(r.parentId) || 0) + 1);
     }
 
-    const enrichedMembers = allMembers.map((m) => ({
+    const enrichedMembers = filteredMembers.map((m) => ({
       ...m,
       spouseCount: spouseCounts.get(m.id) || 0,
       childrenCount: childCounts.get(m.id) || 0,

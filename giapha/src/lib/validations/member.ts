@@ -87,3 +87,20 @@ export const treeQuerySchema = z.object({
   generations: z.coerce.number().int().min(1).max(20).default(5),
   direction: z.enum(["up", "down"]).default("down"),
 });
+
+// ==================== Spouse ====================
+export const addSpouseSchema = z.object({
+  spouseId: z.string().min(1, "Thiếu spouseId"),
+  marriageDate: z.string().optional(),
+});
+
+// ==================== Child ====================
+export const addChildSchema = z.object({
+  childId: z.string().min(1, "Thiếu childId"),
+  marriageId: z.string().optional(),
+});
+
+// ==================== Parent ====================
+export const addParentSchema = z.object({
+  parentId: z.string().min(1, "Thiếu parentId"),
+});

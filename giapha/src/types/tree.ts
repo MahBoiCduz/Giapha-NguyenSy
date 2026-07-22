@@ -13,20 +13,34 @@ export interface PersonNodeData {
   spouseCount: number;
   childrenCount: number;
   isRoot: boolean;
+  /** Card width from layout engine (for root scaling) */
+  cardWidth?: number;
+  /** Card height from layout engine (for root scaling) */
+  cardHeight?: number;
+}
+
+/** Pre-computed edge route from layout engine */
+export interface EdgeRouteData {
+  points: Array<{ x: number; y: number }>;
 }
 
 // Custom edge data
 export interface ParentChildEdgeData {
   relationshipType: "biological" | "adoptive";
+  route?: EdgeRouteData | null;
 }
 
 export interface SpouseEdgeData {
   marriageDate: string | null;
   isActive: boolean;
+  route?: EdgeRouteData | null;
 }
 
 // Tree direction
 export type TreeDirection = "up" | "down";
+
+// Tree display mode
+export type TreeMode = "simple" | "expand" | "group";
 
 // Tree style
 export type EdgeStyle = "step" | "smoothstep" | "bezier";

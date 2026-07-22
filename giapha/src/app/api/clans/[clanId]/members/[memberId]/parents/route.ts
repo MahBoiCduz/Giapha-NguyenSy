@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { parentChildRelationships, members } from "@/lib/db/schema";
+import { addParentSchema } from "@/lib/validations/member";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -11,14 +12,16 @@ export async function POST(
   try {
     const { clanId, memberId } = await params;
     const body = await req.json();
-    const { parentId } = body;
+    const parsed = addParentSchema.safeParse(body);
 
-    if (!parentId) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { message: "Thiếu parentId" },
+        { message: "Dữ liệu không hợp lệ", errors: parsed.error.flatten() },
         { status: 400 }
       );
     }
+
+    const { parentId } = parsed.data;
 
     // Verify both members exist
     const [child, parent] = await Promise.all([

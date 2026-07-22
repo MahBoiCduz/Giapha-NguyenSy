@@ -1,6 +1,5 @@
 export type Gender = "male" | "female";
 export type RelationshipType = "biological" | "adoptive";
-export type EditorRole = "owner" | "editor" | "viewer";
 
 export interface Member {
   id: string;

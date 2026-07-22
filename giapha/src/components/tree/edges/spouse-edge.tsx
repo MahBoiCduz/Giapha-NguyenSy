@@ -13,15 +13,28 @@ function SpouseEdgeComponent({
   data,
   style = {},
 }: EdgeProps & { data?: SpouseEdgeData }) {
-  const midY = (sourceY + targetY) / 2;
-  const path = `M ${sourceX} ${sourceY} L ${sourceX} ${midY} L ${targetX} ${midY} L ${targetX} ${targetY}`;
-
   const isDivorced = data?.isActive === false;
+
+  // Use pre-computed route from layout engine if available
+  let edgePath: string;
+
+  if (data?.route?.points && data.route.points.length >= 2) {
+    const pts = data.route.points;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      d += ` L ${pts[i].x} ${pts[i].y}`;
+    }
+    edgePath = d;
+  } else {
+    // Fallback: L-shaped horizontal connection
+    const midY = (sourceY + targetY) / 2;
+    edgePath = `M ${sourceX} ${sourceY} L ${sourceX} ${midY} L ${targetX} ${midY} L ${targetX} ${targetY}`;
+  }
 
   return (
     <BaseEdge
       id={id}
-      path={path}
+      path={edgePath}
       style={{
         ...style,
         stroke: isDivorced ? "#94a3b8" : style?.stroke || "#ec4899",

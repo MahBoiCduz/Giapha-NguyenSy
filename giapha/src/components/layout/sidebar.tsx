@@ -1,19 +1,51 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
-import { ScrollText, PlusCircle, Settings, Users } from "lucide-react";
+import { ScrollText, PlusCircle, Users } from "lucide-react";
+import { ClanCreateDialog } from "@/components/clans/clan-create-dialog";
 import type { Clan } from "@/types/clan";
 
 interface SidebarProps {
-  clans: Clan[];
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function Sidebar({ clans, isOpen, onClose }: SidebarProps) {
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [clans, setClans] = useState<Clan[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const fetchClans = useCallback(async () => {
+    try {
+      const res = await fetch("/api/clans");
+      if (res.ok) {
+        const data = await res.json();
+        setClans(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch clans:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchClans();
+  }, [fetchClans]);
+
+  const handleCreateClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setDialogOpen(true);
+  };
+
+  const handleDialogClose = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      fetchClans(); // refresh list
+    }
+  };
 
   return (
     <>
@@ -77,16 +109,18 @@ export function Sidebar({ clans, isOpen, onClose }: SidebarProps) {
               <ScrollText className="h-4 w-4" />
               Tất cả dòng họ
             </Link>
-            <Link
-              href="/dashboard?create=true"
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+            <button
+              onClick={handleCreateClick}
+              className="w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors text-left"
             >
               <PlusCircle className="h-4 w-4" />
               Tạo dòng họ mới
-            </Link>
+            </button>
           </div>
         </div>
       </aside>
+
+      <ClanCreateDialog open={dialogOpen} onOpenChange={handleDialogClose} />
     </>
   );
 }
